@@ -10,6 +10,8 @@ use std::process::Command;
 use std::process::Stdio;
 use std::thread;
 
+mod process_tree;
+
 #[derive(Parser)]
 #[command(name = "tmpmemstore")]
 #[command(about = "Store data in memory and expose via UNIX socket", long_about = None)]
@@ -84,15 +86,8 @@ fn run_command(input: Option<String>, command: Vec<String>) -> Result<()> {
 
     thread::spawn(move || {
         for stream in listener.incoming() {
-            match stream {
-                Ok(mut stream) => {
-                    if let Err(e) = stream.write_all(data.as_bytes()) {
-                        eprintln!("Error writing to socket: {}", e);
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Error accepting connection: {}", e);
-                }
+            if let Err(e) = handle_stream(&data, stream) {
+                eprintln!("Error handling connection: {e}");
             }
         }
     });
@@ -110,6 +105,19 @@ fn run_command(input: Option<String>, command: Vec<String>) -> Result<()> {
     let status = child.wait()?;
 
     std::process::exit(status.code().unwrap_or(1));
+}
+
+fn handle_stream(
+    data: &String,
+    stream: std::result::Result<UnixStream, std::io::Error>,
+) -> Result<()> {
+    let parent_pid = std::process::id();
+    let mut stream = stream.context("Accepting connection")?;
+    // Verify the connecting process is a descendant
+    process_tree::verify_client_is_descendant(&stream, parent_pid)
+        .context("Verifying connecting process is subprocess")?;
+    stream.write_all(data.as_bytes()).context("Writing data")?;
+    Ok(())
 }
 
 fn retrieve_data() -> Result<()> {
