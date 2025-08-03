@@ -8,7 +8,6 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::Command;
 use std::process::Stdio;
-use std::sync::Arc;
 use std::thread;
 
 #[derive(Parser)]
@@ -68,16 +67,16 @@ fn read_input_data(input: Option<String>) -> Result<String> {
 fn run_command(input: Option<String>, command: Vec<String>) -> Result<()> {
     let data = read_input_data(input)?;
 
-    let socket_file = tempfile::Builder::new()
+    let temp_dir = tempfile::Builder::new()
         .prefix("tmpmemstore-")
-        .suffix(".sock")
-        .tempfile()
-        .context("Failed to create temporary file")?;
-    let socket_path = socket_file.path();
-    let listener = UnixListener::bind(dbg!(socket_path)).context("Failed to bind socket")?;
-    let mut perms = fs::metadata(socket_path)?.permissions();
+        .tempdir()
+        .context("Failed to create temporary directory")?;
+    let socket_path = temp_dir.path().join("socket");
+
+    let listener = UnixListener::bind(&socket_path).context("Failed to bind socket")?;
+    let mut perms = fs::metadata(&socket_path)?.permissions();
     perms.set_mode(0o600);
-    fs::set_permissions(socket_path, perms).context("Failed to set socket permissions")?;
+    fs::set_permissions(&socket_path, perms).context("Failed to set socket permissions")?;
 
     let socket_path = socket_path
         .to_str()
@@ -101,6 +100,7 @@ fn run_command(input: Option<String>, command: Vec<String>) -> Result<()> {
     let mut child = Command::new(&command[0])
         .args(&command[1..])
         .env("TMPMEMSTORE_SOCKET", socket_path)
+        .current_dir(std::env::current_dir()?)
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
