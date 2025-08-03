@@ -23,6 +23,9 @@ struct Cli {
 enum Commands {
     /// Run a command with access to stored data
     Run {
+        /// Read data from file instead of prompting (use '-' for stdin)
+        #[arg(short = 'i', long = "input", value_name = "FILE")]
+        input: Option<String>,
         /// Command and arguments to run
         #[arg(last = true, required = true)]
         command: Vec<String>,
@@ -35,13 +38,35 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Run { command } => run_command(command),
+        Commands::Run { input, command } => run_command(input, command),
         Commands::Retrieve => retrieve_data(),
     }
 }
 
-fn run_command(command: Vec<String>) -> Result<()> {
-    let data = prompt_password("Enter data to store: ").context("Failed to read password")?;
+fn read_input_data(input: Option<String>) -> Result<String> {
+    match input {
+        Some(file_path) => {
+            if file_path == "-" {
+                // Read from stdin
+                let mut buffer = String::new();
+                std::io::Read::read_to_string(&mut std::io::stdin(), &mut buffer)
+                    .context("Failed to read from stdin")?;
+                Ok(buffer)
+            } else {
+                // Read from file
+                std::fs::read_to_string(&file_path)
+                    .with_context(|| format!("Failed to read file: {}", file_path))
+            }
+        }
+        None => {
+            // Prompt for password as before
+            prompt_password("Enter data to store: ").context("Failed to read password")
+        }
+    }
+}
+
+fn run_command(input: Option<String>, command: Vec<String>) -> Result<()> {
+    let data = read_input_data(input)?;
 
     let socket_file = tempfile::Builder::new()
         .prefix("tmpmemstore-")
