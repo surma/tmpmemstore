@@ -1,0 +1,22 @@
+{
+  "json": {},
+  "exec": {
+    "commands": [
+      {
+        "command": "rustfmt --edition 2021 --config unstable_features=true --config format_code_in_doc_comments=true",
+        "exts": ["rs"]
+      },
+      {
+        "command": "nixfmt",
+        "exts": ["nix"]
+      }
+    ]
+  },
+  "excludes": [],
+  "plugins": [
+    "https://plugins.dprint.dev/json-0.20.0.wasm",
+    "https://plugins.dprint.dev/toml-0.7.0.wasm",
+    "https://plugins.dprint.dev/g-plane/pretty_yaml-v0.5.1.wasm",
+    "https://plugins.dprint.dev/exec-0.5.1.json@492414e39dea4dccc07b4af796d2f4efdb89e84bae2bd4e1e924c0cc050855bf"
+  ]
+}
