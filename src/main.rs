@@ -1,3 +1,4 @@
+use anyhow::bail;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use rpassword::prompt_password;
@@ -113,9 +114,11 @@ fn handle_stream(
 ) -> Result<()> {
     let parent_pid = std::process::id();
     let mut stream = stream.context("Accepting connection")?;
-    // Verify the connecting process is a descendant
-    process_tree::verify_client_is_descendant(&stream, parent_pid)
-        .context("Verifying connecting process is subprocess")?;
+    if !process_tree::client_is_descendant(&stream, parent_pid)
+        .context("Verifying connecting process is subprocess")?
+    {
+        bail!("Client is not descendant");
+    }
     stream.write_all(data.as_bytes()).context("Writing data")?;
     Ok(())
 }

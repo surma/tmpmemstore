@@ -3,22 +3,25 @@ use std::os::unix::net::UnixStream;
 use sysinfo::Pid;
 use sysinfo::System;
 
-// macOS-specific constants for LOCAL_PEERPID
 #[cfg(target_os = "macos")]
-const SOL_LOCAL: libc::c_int = 0; // Protocol level for local sockets
+const SOL_LOCAL: libc::c_int = 0;
 #[cfg(target_os = "macos")]
-const LOCAL_PEERPID: libc::c_int = 0x002; // Get peer PID
+const LOCAL_PEERPID: libc::c_int = 0x002;
 
-pub(crate) fn verify_client_is_descendant(stream: &UnixStream, ancestor_pid: u32) -> Result<()> {
-    // Option 1: Using unix-cred to get peer PID (cross-platform)
+pub fn client_is_descendant(stream: &UnixStream, ancestor_pid: u32) -> Result<bool> {
+    let peer_id = get_peer_id(stream)?;
+    Ok(is_process_descendant(peer_id, ancestor_pid))
+}
+
+fn get_peer_id(stream: &UnixStream) -> Result<u32> {
     #[cfg(target_os = "linux")]
     {
-        verify_client_is_descendant_linux(stream, ancestor_pid)
+        get_peer_id_linux(stream)
     }
 
     #[cfg(target_os = "macos")]
     {
-        verify_client_is_descendant_macos(stream, ancestor_pid)
+        get_peer_id_macos(stream)
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -28,10 +31,7 @@ pub(crate) fn verify_client_is_descendant(stream: &UnixStream, ancestor_pid: u32
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn verify_client_is_descendant_macos(
-    stream: &UnixStream,
-    ancestor_pid: u32,
-) -> Result<(), anyhow::Error> {
+fn get_peer_id_macos(stream: &UnixStream) -> Result<u32> {
     use std::mem;
     use std::os::unix::io::AsRawFd;
 
@@ -52,25 +52,14 @@ pub(crate) fn verify_client_is_descendant_macos(
             std::io::Error::last_os_error()
         );
     }
-    if is_process_descendant(pid as u32, ancestor_pid)? {
-        return Ok(());
-    }
-    anyhow::bail!("Client process is not a descendant of the server");
+    Ok(pid as u32)
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn verify_client_is_descendant_linux(
-    stream: &UnixStream,
-    ancestor_pid: u32,
-) -> Result<(), anyhow::Error> {
+pub(crate) fn get_peer_id_linux(stream: &UnixStream) -> Result<(), anyhow::Error> {
     let (peer_pid, _, _) =
         unix_cred::get_peer_pid_ids(stream).context("Failed to get peer credentials")?;
-    if let Some(pid) = peer_pid {
-        if is_process_descendant(pid as u32, ancestor_pid)? {
-            return Ok(());
-        }
-    }
-    anyhow::bail!("Client process is not a descendant of the server");
+    Ok(peer_id)
 }
 
 macro_rules! unwrapOrReturnFalse {
@@ -78,13 +67,13 @@ macro_rules! unwrapOrReturnFalse {
         match $v {
             Some(v) => v,
             _ => {
-                return Ok(false);
+                return false;
             }
         }
     };
 }
 
-pub(crate) fn is_process_descendant(child_pid: u32, ancestor_pid: u32) -> Result<bool> {
+fn is_process_descendant(child_pid: u32, ancestor_pid: u32) -> bool {
     use sysinfo::ProcessesToUpdate;
 
     let mut system = System::new();
@@ -94,13 +83,13 @@ pub(crate) fn is_process_descendant(child_pid: u32, ancestor_pid: u32) -> Result
 
     loop {
         if current_pid.as_u32() == ancestor_pid {
-            return Ok(true);
+            return true;
         }
 
         let process = unwrapOrReturnFalse!(system.process(current_pid));
         let parent_pid = unwrapOrReturnFalse!(process.parent());
         if parent_pid.as_u32() <= 1 {
-            return Ok(false);
+            return false;
         }
         current_pid = parent_pid;
     }
