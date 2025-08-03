@@ -11,6 +11,7 @@ tmpmemstore is a Rust utility designed to ephemerally store data like passphrase
 - **Secure Input**: Uses hidden password input to prevent shoulder surfing
 - **Memory-Only Storage**: Data is kept in memory and never written to disk
 - **Permission Protection**: UNIX domain sockets are restricted to owner-only access (0600)
+- **Process Ancestry Verification**: Only child processes can access the stored data (macOS/Linux)
 
 ## Usage
 
@@ -36,4 +37,5 @@ tmpmemstore run -- bash -c '
 ```
 
 ---
+
 Apache 2.0
