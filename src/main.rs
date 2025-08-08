@@ -5,6 +5,7 @@ use rpassword::prompt_password;
 use std::env;
 use std::fs;
 use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -119,6 +120,8 @@ fn run_command(input: Option<String>, socket: Option<String>, command: Vec<Strin
     }
 
     let listener = UnixListener::bind(socket_path.as_ref()).context("Failed to bind socket")?;
+    std::fs::set_permissions(socket_path.as_ref(), std::fs::Permissions::from_mode(0o666))
+        .context("Setting permissions")?;
 
     thread::spawn(move || {
         for stream in listener.incoming() {
@@ -145,6 +148,8 @@ fn run_command(input: Option<String>, socket: Option<String>, command: Vec<Strin
 
     let status = child.wait()?;
 
+    // Keep socket available til after child has exited.
+    drop(socket_path);
     std::process::exit(status.code().unwrap_or(1));
 }
 
