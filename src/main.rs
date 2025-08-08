@@ -95,7 +95,6 @@ impl From<PathBuf> for TempFile {
 
 impl Drop for TempFile {
     fn drop(&mut self) {
-        eprintln!("DROPPING {}", self.as_ref().display());
         if let Err(e) = std::fs::remove_file(self) {
             eprintln!("Error deleting socket: {e}");
         }
