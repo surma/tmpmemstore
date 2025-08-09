@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::os::unix::net::UnixStream;
 use sysinfo::Pid;
 use sysinfo::System;
@@ -56,10 +56,15 @@ fn get_peer_id_macos(stream: &UnixStream) -> Result<u32> {
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn get_peer_id_linux(stream: &UnixStream) -> Result<(), anyhow::Error> {
+pub(crate) fn get_peer_id_linux(stream: &UnixStream) -> Result<u32> {
+    use anyhow::anyhow;
+
     let (peer_pid, _, _) =
         unix_cred::get_peer_pid_ids(stream).context("Failed to get peer credentials")?;
-    Ok(peer_id)
+    Ok(peer_pid
+        .ok_or_else(|| anyhow!("Could not get peer pid"))?
+        .try_into()
+        .unwrap())
 }
 
 macro_rules! unwrapOrReturnFalse {
